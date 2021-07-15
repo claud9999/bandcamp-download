@@ -1,0 +1,21 @@
+#!/bin/bash
+
+while [ 1 ]; do
+    echo "starting Puppeteer script"
+    node bc-dl.js | tee dl-out.txt
+
+    echo "updating the database with what I have"
+    ids=$(grep '[0-9][0-9]*' dl-out.txt)
+
+    echo $ids
+
+    for id in $ids; do
+        sqlite3 bc.db "update items set have = 1 where sale_item_id = $id;"
+    done
+
+    echo "updating download URL's"
+    ./bc-todo > redownload_urls.json
+
+    echo "sleeping 1 minute, if you want to stop, now's the time"
+    sleep 60
+done

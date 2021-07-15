@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+
+import json, sqlite3, os.path
+
+db = sqlite3.connect('bc.db')
+
+j = {}
+
+cu = db.cursor()
+cu2 = db.cursor()
+
+for row in cu.execute('select sale_item_id, download_url from items where have is null limit 20'):
+    print(row)
+    j[row[0]] = row[1]
+
+print(json.dumps(j, indent=4))
+
+db.close()

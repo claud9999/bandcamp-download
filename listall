@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+
+#######################################
+#### stuff to hand-edit            ####
+#######################################
+
+# copy/paste your Cookies field from your browser
+cookies='client_id=...js_logged_in=1'
+
+# your username in bc
+bc_user='cloudnein'
+
+# I don't think this one matters, but you can find this by examining the 
+# request body of the "collection_items" POST request
+bc_fan_id='165211'
+
+#######################################
+#### shouldn't need to touch below ####
+#######################################
+
+import json, http.client, re, sys, pdb, html.parser, sqlite3
+
+db = sqlite3.connect('bc.db')
+cur = db.cursor()
+try:
+    cur.execute('''create table if not exists items(item_title, item_type, band_name, sale_item_id, download_url, have)''')
+    cur.execute('''create unique index if not exists item_sale_item_id on items(sale_item_id)''')
+    db.commit()
+except:
+    pass
+
+def mapattrs(attrs):
+    m = {}
+    for attr in attrs:
+        if attr[0] in m:
+            if type(m[attr[0]]) == type([]):
+                m[attr[0]].append(attr[1])
+            else:
+                m[attr[0]] = [m[attr[0]], attr[1]]
+        else: m[attr[0]] = attr[1]
+    return m
+
+class MyParser(html.parser.HTMLParser):
+    def __init__(self):
+        html.parser.HTMLParser.__init__(self)
+        self.data_blob = None
+
+    def handle_starttag(self, tag, attrs):
+        ma = mapattrs(attrs)
+        if tag == 'div' and 'id' in ma and ma['id'] == 'pagedata': self.data_blob = ma['data-blob']
+
+datatoken_re = re.compile('data-token="([^"]*)"')
+
+conn = http.client.HTTPSConnection('bandcamp.com')
+conn.request(
+    method='GET',
+    url='/%s' % bc_user,
+    headers={'Cookie': cookies}
+)
+response = conn.getresponse()
+p = MyParser()
+p.feed(response.read().decode('utf-8'))
+conn.close()
+j = json.loads(p.data_blob)
+for item in j['item_cache']['collection'].values():
+    try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id) values(?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id']))
+    except: pass
+db.commit()
+
+redownload_urls = j['collection_data']['redownload_urls']
+last_token = j['collection_data']['last_token']
+
+params = {
+    'fan_id': bc_fan_id,
+    'older_than_token': last_token,
+    'count': 40,
+}
+
+more_available = True
+pagenum = 1
+while more_available:
+    params_json = json.dumps(params)
+    conn = http.client.HTTPSConnection('bandcamp.com')
+    conn.request(
+        method='POST',
+        url='/api/fancollection/1/collection_items',
+        body=params_json,
+        headers={'Cookie': cookies}
+    )
+    response = conn.getresponse()
+    j = json.load(response)
+    conn.close()
+
+    for item in j['items']:
+        try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id) values(?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id']))
+        except: pass
+    db.commit()
+    pagenum = pagenum + 1
+
+    print('%d' % len(redownload_urls))
+    more_available = j['more_available']
+    params['older_than_token'] = j['last_token']
+    redownload_urls |= j['redownload_urls']
+    last_token = j['last_token']
+
+
+db.close()
