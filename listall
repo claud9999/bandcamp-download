@@ -5,7 +5,7 @@
 #######################################
 
 # copy/paste your Cookies field from your browser
-cookies='client_id=...js_logged_in=1'
+cookies='client_id=...nique_24h=223'
 
 # your username in bc
 bc_user='cloudnein'
@@ -61,13 +61,16 @@ response = conn.getresponse()
 p = MyParser()
 p.feed(response.read().decode('utf-8'))
 conn.close()
+
 j = json.loads(p.data_blob)
+
+redownload_urls = j['collection_data']['redownload_urls']
+
 for item in j['item_cache']['collection'].values():
-    try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id) values(?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id']))
+    try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id) values(?, ?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id'], redownload_urls['%s%s' % (item['sale_item_type'], item['sale_item_id'])]))
     except: pass
 db.commit()
 
-redownload_urls = j['collection_data']['redownload_urls']
 last_token = j['collection_data']['last_token']
 
 params = {
@@ -92,7 +95,7 @@ while more_available:
     conn.close()
 
     for item in j['items']:
-        try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id) values(?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id']))
+        try: cur.execute('insert into items(item_title, item_type, band_name, sale_item_id, download_url) values(?, ?, ?, ?, ?)', (item['item_title'], item['item_type'], item['band_name'], item['sale_item_id'], j['redownload_urls']['%s%s' % (item['sale_item_type'], item['sale_item_id'])]))
         except: pass
     db.commit()
     pagenum = pagenum + 1
